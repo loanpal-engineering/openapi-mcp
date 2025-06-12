@@ -128,6 +128,10 @@ func ServeMCP(addr string, toolSet *mcp.ToolSet, cfg *config.Config) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/mcp", mcpHandler) // Single endpoint for GET/POST/OPTIONS
 
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
 	log.Printf("MCP server listening on %s/mcp", addr)
 	return http.ListenAndServe(addr, mux)
 }
