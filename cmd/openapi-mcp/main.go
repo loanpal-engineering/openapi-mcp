@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
@@ -123,14 +124,43 @@ func main() {
 	log.Printf("Configuration loaded: %+v\n", cfg)
 	log.Println("API Key (resolved):", cfg.GetAPIKey())
 
-	// --- Call Parser ---
-	specDoc, version, err := parser.LoadSwagger(cfg.SpecPath)
+	fileInfo, err := os.Stat(cfg.SpecPath)
 	if err != nil {
-		log.Fatalf("Failed to load OpenAPI/Swagger spec: %v", err)
+		log.Fatalf("Spec path error: %v", err)
 	}
-	log.Printf("Spec type %s loaded successfully from %s.\n", version, cfg.SpecPath)
 
-	toolSet, err := parser.GenerateToolSet(specDoc, version, cfg)
+	specDocs := []interface{}{}
+	version := "v3"
+	if fileInfo.IsDir() {
+		// Walk through all files in the directory
+		err := filepath.WalkDir(cfg.SpecPath, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if !d.IsDir() {
+				specDoc, version, err := parser.LoadSwagger(path)
+				if err != nil {
+					log.Printf("Warning: Failed to load spec from %s: %v", path, err)
+					return nil // skip and continue
+				}
+				log.Printf("Spec type %s loaded successfully from %s.\n", version, path)
+				specDocs = append(specDocs, specDoc)
+			}
+			return nil
+		})
+		if err != nil {
+			log.Fatalf("Failed to scan spec directory: %v", err)
+		}
+	} else {
+		specDoc, version, err := parser.LoadSwagger(cfg.SpecPath)
+		if err != nil {
+			log.Fatalf("Failed to load OpenAPI/Swagger spec: %v", err)
+		}
+		log.Printf("Spec type %s loaded successfully from %s.\n", version, cfg.SpecPath)
+		specDocs = append(specDocs, specDoc)
+	}
+
+	toolSet, err := parser.GenerateToolSet(specDocs[0], version, cfg)
 	if err != nil {
 		log.Fatalf("Failed to generate MCP toolset: %v", err)
 	}
